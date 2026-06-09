@@ -518,20 +518,19 @@ export default function CartDrawer({
                 </label>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
                   {DELIVERY_OPTIONS.map((opt) => (
-                    <label
-                      key={opt.value}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.8rem",
-                        background: "white",
-                        border: `1.5px solid ${delivery.value === opt.value ? "var(--green)" : "rgba(27,67,50,0.15)"}`,
-                        borderRadius: "0.75rem",
-                        padding: "0.8rem 1rem",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                        background: delivery.value === opt.value ? "rgba(27,67,50,0.04)" : "white",
-                      }}
+                <label
+                  key={opt.value}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.8rem",
+                    background: delivery.value === opt.value ? "rgba(27,67,50,0.04)" : "white",
+                    border: `1.5px solid ${delivery.value === opt.value ? "var(--green)" : "rgba(27,67,50,0.15)"}`,
+                    borderRadius: "0.75rem",
+                    padding: "0.8rem 1rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
                     >
                       <input
                         type="radio"
