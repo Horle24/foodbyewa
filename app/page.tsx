@@ -57,7 +57,7 @@ export default function Home() {
     setCart((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  // ✅ NEW: clears the entire cart (called after order is sent)
+  // clears the entire cart (called after order is sent)
   const handleClearCart = useCallback(() => {
     setCart([]);
   }, []);
@@ -88,7 +88,7 @@ export default function Home() {
         onClose={() => setDrawerOpen(false)}
         onUpdateQty={handleUpdateQty}
         onRemove={handleRemove}
-        onClearCart={handleClearCart}  {/* ✅ NEW: added here */}
+        onClearCart={handleClearCart}  {}
       />
 
       {/* ━━━ TOAST ━━━ */}
