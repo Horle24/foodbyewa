@@ -4,14 +4,15 @@ import { useEffect, useState } from "react";
 import { CartItem, DeliveryOption, DELIVERY_OPTIONS, buildWhatsAppMessage } from "@/lib/menuData";
 
 const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER!;
-const SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL!;
+const SCRIPT_URL      = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL!;
 
 interface CartDrawerProps {
-  cart: CartItem[];
-  onUpdateQty: (id: number, delta: number) => void;
-  onRemove: (id: number) => void;
-  onClose: () => void;
-  isOpen: boolean;
+  cart:          CartItem[];
+  onUpdateQty:   (id: number, delta: number) => void;
+  onRemove:      (id: number) => void;
+  onClose:       () => void;
+  onClearCart:   () => void;   // ← NEW: clears cart after order
+  isOpen:        boolean;
 }
 
 const TIMES = [
@@ -20,28 +21,40 @@ const TIMES = [
   "Dinner — 5pm to 8pm",
 ];
 
-export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpen }: CartDrawerProps) {
-  const [step, setStep] = useState(1);
-  const [delivery, setDelivery] = useState<DeliveryOption>(DELIVERY_OPTIONS[0]);
+export default function CartDrawer({
+  cart, onUpdateQty, onRemove, onClose, onClearCart, isOpen,
+}: CartDrawerProps) {
+  const [step,       setStep]       = useState<1 | 2 | 3>(1); // 3 = success
+  const [delivery,   setDelivery]   = useState<DeliveryOption>(DELIVERY_OPTIONS[0]);
   const [submitting, setSubmitting] = useState(false);
+  const [sheetError, setSheetError] = useState(false); // show sheet warning if it fails
   const [form, setForm] = useState({
     name: "", phone: "", whatsapp: "", address: "", time: TIMES[0], notes: "",
   });
 
+  // Reset when drawer closes
   useEffect(() => {
-    if (!isOpen) setTimeout(() => setStep(1), 400);
+    if (!isOpen) {
+      setTimeout(() => {
+        setStep(1);
+        setSheetError(false);
+        setForm({ name: "", phone: "", whatsapp: "", address: "", time: TIMES[0], notes: "" });
+        setDelivery(DELIVERY_OPTIONS[0]);
+      }, 400);
+    }
   }, [isOpen]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
-  const total = subtotal + delivery.fee;
+  const total    = subtotal + delivery.fee;
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  const handleFormChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   const handleSendOrder = async () => {
     if (!form.name || !form.phone || !form.address) {
@@ -49,59 +62,66 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
       return;
     }
     setSubmitting(true);
+    setSheetError(false);
 
     const orderData = {
-      customer_name: form.name,
-      customer_phone: form.phone,
-      customer_whatsapp: form.whatsapp || form.phone,
-      delivery_address: form.address,
-      items: cart.map((c) => ({ id: c.id, name: c.name, qty: c.qty, price: c.price })),
+      customer_name:      form.name,
+      customer_phone:     form.phone,
+      customer_whatsapp:  form.whatsapp || form.phone,
+      delivery_address:   form.address,
+      items:              cart.map((c) => ({ id: c.id, name: c.name, qty: c.qty, price: c.price })),
       subtotal,
-      delivery_fee: delivery.fee,
+      delivery_fee:       delivery.fee,
       total,
-      delivery_type: delivery.value,
-      delivery_label: delivery.label,
-      preferred_time: form.time,
-      special_notes: form.notes,
+      delivery_type:      delivery.value,
+      delivery_label:     delivery.label,
+      preferred_time:     form.time,
+      special_notes:      form.notes,
+      timestamp:          new Date().toISOString(),
     };
 
-    // ── Save to Google Sheet directly (bypass Next.js API route) ──
-    try {
-      await fetch(SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors", // Required for Google Apps Script
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData),
-      });
-    } catch (err) {
-      console.error("Sheet save error:", err);
+    // ── 1. Save to Google Sheet ──────────────────────────────
+    
+    if (SCRIPT_URL) {
+      try {
+        await fetch(SCRIPT_URL, {
+          method:  "POST",
+          mode:    "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(orderData),
+        });
+      } catch (err) {
+        console.error("Google Sheet save failed:", err);
+        setSheetError(true); // warn user but don't block WhatsApp
+      }
+    } else {
+      console.warn("NEXT_PUBLIC_GOOGLE_SCRIPT_URL not set — skipping sheet save.");
     }
 
-    // ── Open WhatsApp ──
+    // ── 2. Open WhatsApp ─────────────────────────────────────
     const message = buildWhatsAppMessage(cart, delivery, form);
     const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
-    // Use location.href on mobile for better compatibility
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
       window.location.href = url;
     } else {
       window.open(url, "_blank");
     }
 
+    // ── 3. Clear cart + show success screen ──────────────────
+    onClearCart();      // empties the cart
     setSubmitting(false);
-    onClose();
+    setStep(3);         // show success step instead of closing immediately
   };
 
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "0.72rem 1rem",
     border: "1.5px solid rgba(27,67,50,0.2)",
     borderRadius: "0.75rem", fontFamily: "inherit",
-    fontSize: "16px", // 16px prevents iOS zoom
-    background: "white", color: "var(--charcoal)",
-    outline: "none", transition: "border-color 0.2s",
-    WebkitAppearance: "none",
+    fontSize: "16px", background: "white",
+    color: "var(--charcoal)", outline: "none",
+    transition: "border-color 0.2s", WebkitAppearance: "none",
   };
-
   const labelStyle: React.CSSProperties = {
     display: "block", fontSize: "0.75rem", fontWeight: 700,
     color: "var(--green-dark)", textTransform: "uppercase",
@@ -111,7 +131,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
   return (
     <>
       {/* Overlay */}
-      <div onClick={onClose} style={{
+      <div onClick={step === 3 ? undefined : onClose} style={{
         position: "fixed", inset: 0,
         background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)",
         zIndex: 1000,
@@ -130,7 +150,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
         display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{
           background: "var(--green-dark)", color: "white",
           padding: "1.2rem 1.5rem",
@@ -138,41 +158,45 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
           flexShrink: 0,
         }}>
           <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.2rem", fontWeight: 700 }}>
-            {step === 1 ? "🛒 Your Order" : "📋 Delivery Details"}
+            {step === 1 ? "🛒 Your Order" : step === 2 ? "📋 Delivery Details" : "✅ Order Confirmed!"}
           </h2>
-          <button onClick={onClose} style={{
-            background: "rgba(255,255,255,0.15)", border: "none", color: "white",
-            width: "34px", height: "34px", borderRadius: "50%", cursor: "pointer",
-            fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center",
-          }}>✕</button>
+          {step !== 3 && (
+            <button onClick={onClose} style={{
+              background: "rgba(255,255,255,0.15)", border: "none", color: "white",
+              width: "34px", height: "34px", borderRadius: "50%", cursor: "pointer",
+              fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>✕</button>
+          )}
         </div>
 
-        {/* Step bar */}
-        <div style={{
-          display: "flex", background: "var(--green)",
-          padding: "0.5rem 1.5rem", gap: "0.5rem", alignItems: "center", flexShrink: 0,
-        }}>
-          {[1, 2].map((s) => (
-            <div key={s} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <div style={{
-                width: "22px", height: "22px", borderRadius: "50%",
-                background: step >= s ? "var(--gold)" : "rgba(255,255,255,0.2)",
-                color: step >= s ? "var(--green-dark)" : "rgba(255,255,255,0.5)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "0.72rem", fontWeight: 800, transition: "all 0.3s",
-              }}>{s}</div>
-              <span style={{ fontSize: "0.72rem", color: step >= s ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.4)", fontWeight: step === s ? 600 : 400 }}>
-                {s === 1 ? "Cart" : "Delivery"}
-              </span>
-              {s < 2 && <div style={{ width: "24px", height: "1px", background: "rgba(255,255,255,0.2)", margin: "0 0.2rem" }} />}
-            </div>
-          ))}
-        </div>
+        {/* ── Step bar (hidden on success) ── */}
+        {step !== 3 && (
+          <div style={{
+            display: "flex", background: "var(--green)",
+            padding: "0.5rem 1.5rem", gap: "0.5rem", alignItems: "center", flexShrink: 0,
+          }}>
+            {[1, 2].map((s) => (
+              <div key={s} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <div style={{
+                  width: "22px", height: "22px", borderRadius: "50%",
+                  background: step >= s ? "var(--gold)" : "rgba(255,255,255,0.2)",
+                  color: step >= s ? "var(--green-dark)" : "rgba(255,255,255,0.5)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "0.72rem", fontWeight: 800, transition: "all 0.3s",
+                }}>{s}</div>
+                <span style={{ fontSize: "0.72rem", color: step >= s ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.4)", fontWeight: step === s ? 600 : 400 }}>
+                  {s === 1 ? "Cart" : "Delivery"}
+                </span>
+                {s < 2 && <div style={{ width: "24px", height: "1px", background: "rgba(255,255,255,0.2)", margin: "0 0.2rem" }} />}
+              </div>
+            ))}
+          </div>
+        )}
 
-        {/* Body */}
+        {/* ── Body ── */}
         <div style={{ flex: 1, overflowY: "auto", padding: "1.2rem", WebkitOverflowScrolling: "touch" as any }}>
 
-          {/* STEP 1 — CART */}
+          {/* ━━━ STEP 1 — CART ━━━ */}
           {step === 1 && (
             <>
               {cart.length === 0 ? (
@@ -227,7 +251,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
             </>
           )}
 
-          {/* STEP 2 — FORM */}
+          {/* ━━━ STEP 2 — FORM ━━━ */}
           {step === 2 && (
             <div>
               <button onClick={() => setStep(1)} style={{
@@ -235,8 +259,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                 background: "none", border: "1.5px solid rgba(27,67,50,0.2)",
                 color: "var(--text-muted)", padding: "0.45rem 0.9rem",
                 borderRadius: "var(--radius-full)", fontSize: "0.85rem",
-                fontWeight: 600, cursor: "pointer", marginBottom: "1rem",
-                fontFamily: "inherit",
+                fontWeight: 600, cursor: "pointer", marginBottom: "1rem", fontFamily: "inherit",
               }}>← Back</button>
 
               <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.2rem", color: "var(--green-dark)", fontWeight: 700, marginBottom: "0.3rem" }}>
@@ -247,19 +270,18 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
               </p>
 
               {[
-                { label: "Full Name *", name: "name", type: "text", placeholder: "Your full name" },
-                { label: "Phone Number *", name: "phone", type: "tel", placeholder: "+353 8X XXX XXXX" },
-                { label: "WhatsApp (if different)", name: "whatsapp", type: "tel", placeholder: "+353 8X XXX XXXX" },
+                { label: "Full Name *",               name: "name",     type: "text", placeholder: "Your full name"      },
+                { label: "Phone Number *",             name: "phone",    type: "tel",  placeholder: "+353 8X XXX XXXX"    },
+                { label: "WhatsApp (if different)",    name: "whatsapp", type: "tel",  placeholder: "+353 8X XXX XXXX"    },
               ].map((field) => (
                 <div key={field.name} style={{ marginBottom: "0.9rem" }}>
                   <label style={labelStyle}>{field.label}</label>
-                  <input
-                    type={field.type} name={field.name}
+                  <input type={field.type} name={field.name}
                     value={form[field.name as keyof typeof form]}
                     onChange={handleFormChange} placeholder={field.placeholder}
                     style={inputStyle}
                     onFocus={(e) => (e.currentTarget.style.borderColor = "var(--green)")}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(27,67,50,0.2)")}
+                    onBlur={(e)  => (e.currentTarget.style.borderColor = "rgba(27,67,50,0.2)")}
                   />
                 </div>
               ))}
@@ -270,7 +292,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                   placeholder="Full address in Letterkenny / Donegal..." rows={3}
                   style={{ ...inputStyle, resize: "vertical" }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = "var(--green)")}
-                  onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(27,67,50,0.2)")}
+                  onBlur={(e)  => (e.currentTarget.style.borderColor = "rgba(27,67,50,0.2)")}
                 />
               </div>
 
@@ -285,8 +307,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                       borderRadius: "0.75rem", padding: "0.75rem 0.9rem", cursor: "pointer",
                     }}>
                       <input type="radio" name="delivery" value={opt.value}
-                        checked={delivery.value === opt.value}
-                        onChange={() => setDelivery(opt)}
+                        checked={delivery.value === opt.value} onChange={() => setDelivery(opt)}
                         style={{ accentColor: "var(--green)", width: "16px", height: "16px" }}
                       />
                       <div style={{ flex: 1 }}>
@@ -316,10 +337,7 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
               </div>
 
               {/* Order Summary */}
-              <div style={{
-                background: "var(--green-dark)", borderRadius: "var(--radius)",
-                padding: "1rem", marginBottom: "0.5rem",
-              }}>
+              <div style={{ background: "var(--green-dark)", borderRadius: "var(--radius)", padding: "1rem", marginBottom: "0.5rem" }}>
                 <div style={{ fontSize: "0.7rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: "0.7rem" }}>
                   Order Summary
                 </div>
@@ -339,16 +357,87 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                   <span>Total</span><span>€{total.toFixed(2)}</span>
                 </div>
               </div>
+
+              {/* Sheet error warning */}
+              {sheetError && (
+                <div style={{
+                  background: "rgba(255,160,0,0.1)", border: "1px solid rgba(255,160,0,0.35)",
+                  borderRadius: "0.75rem", padding: "0.75rem 1rem",
+                  fontSize: "0.8rem", color: "#b45000", marginTop: "0.5rem",
+                }}>
+                  ⚠️ Order log failed — but your WhatsApp order still went through fine.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ━━━ STEP 3 — SUCCESS ━━━ */}
+          {step === 3 && (
+            <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
+              {/* Animated checkmark */}
+              <div style={{
+                width: "80px", height: "80px", borderRadius: "50%",
+                background: "linear-gradient(135deg, var(--green), var(--green-dark))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                margin: "0 auto 1.5rem",
+                boxShadow: "0 8px 32px rgba(27,67,50,0.35)",
+                animation: "popIn 0.4s cubic-bezier(0.34,1.56,0.64,1)",
+              }}>
+                <span style={{ fontSize: "2.2rem" }}>✅</span>
+              </div>
+
+              <h3 style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: "1.6rem", fontWeight: 700,
+                color: "var(--green-dark)", marginBottom: "0.5rem",
+              }}>
+                Order Sent!
+              </h3>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1.75, marginBottom: "1.5rem" }}>
+                Your order has been sent to Ewa on WhatsApp. She'll confirm your order and delivery shortly. 🍲
+              </p>
+
+              {sheetError && (
+                <p style={{ fontSize: "0.78rem", color: "#b45000", marginBottom: "1rem" }}>
+                  ⚠️ Note: Order log to Google Sheet failed, but your WhatsApp message went through fine.
+                </p>
+              )}
+
+              {/* Order recap */}
+              <div style={{
+                background: "white", borderRadius: "var(--radius)",
+                padding: "1rem 1.2rem", marginBottom: "1.5rem",
+                boxShadow: "0 2px 12px rgba(0,0,0,0.06)", textAlign: "left",
+              }}>
+                <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--green)", marginBottom: "0.6rem" }}>
+                  Your Order
+                </p>
+                {/* We store the last order in a ref so it shows after cart is cleared */}
+                <p style={{ fontSize: "0.85rem", color: "var(--charcoal)", lineHeight: 1.7 }}>
+                  <strong>{form.name}</strong><br />
+                  📞 {form.phone}<br />
+                  📍 {form.address}<br />
+                  🚗 {delivery.label}<br />
+                  ⏰ {form.time}
+                </p>
+              </div>
+
+              <style>{`
+                @keyframes popIn {
+                  0%   { transform: scale(0.5); opacity: 0; }
+                  100% { transform: scale(1);   opacity: 1; }
+                }
+              `}</style>
             </div>
           )}
         </div>
 
-        {/* Footer CTA */}
+        {/* ── Footer CTA ── */}
         <div style={{
           background: "white", borderTop: "1px solid rgba(27,67,50,0.1)",
           padding: "1rem 1.2rem", flexShrink: 0,
         }}>
-          {step === 1 ? (
+          {step === 1 && (
             <>
               {cart.length > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.92rem", color: "var(--text-muted)", marginBottom: "0.7rem" }}>
@@ -364,9 +453,8 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                 style={{
                   width: "100%",
                   background: cart.length === 0 ? "rgba(27,67,50,0.15)" : "var(--green)",
-                  color: "white", padding: "0.95rem",
-                  borderRadius: "var(--radius-full)", fontSize: "0.95rem",
-                  fontWeight: 700, border: "none",
+                  color: "white", padding: "0.95rem", borderRadius: "var(--radius-full)",
+                  fontSize: "0.95rem", fontWeight: 700, border: "none",
                   cursor: cart.length === 0 ? "not-allowed" : "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
                   fontFamily: "inherit",
@@ -374,23 +462,24 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                 Continue to Delivery Details →
               </button>
             </>
-          ) : (
+          )}
+
+          {step === 2 && (
             <button
               onClick={handleSendOrder}
               disabled={submitting}
               style={{
                 width: "100%",
                 background: submitting ? "rgba(37,211,102,0.6)" : "linear-gradient(135deg, #25D366, #128C7E)",
-                color: "white", padding: "1rem",
-                borderRadius: "var(--radius-full)", fontSize: "1rem",
-                fontWeight: 800, border: "none", cursor: submitting ? "not-allowed" : "pointer",
+                color: "white", padding: "1rem", borderRadius: "var(--radius-full)",
+                fontSize: "1rem", fontWeight: 800, border: "none",
+                cursor: submitting ? "not-allowed" : "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem",
                 fontFamily: "inherit",
                 boxShadow: "0 6px 24px rgba(37,211,102,0.35)",
-                WebkitTapHighlightColor: "transparent",
-                touchAction: "manipulation",
+                WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
               }}>
-              {submitting ? "Sending..." : (
+              {submitting ? "Sending your order…" : (
                 <>
                   <svg width="20" height="20" fill="white" viewBox="0 0 24 24">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
@@ -399,6 +488,19 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
                   Send Order on WhatsApp
                 </>
               )}
+            </button>
+          )}
+
+          {step === 3 && (
+            <button
+              onClick={onClose}
+              style={{
+                width: "100%", background: "var(--green-dark)", color: "white",
+                padding: "0.95rem", borderRadius: "var(--radius-full)",
+                fontSize: "0.95rem", fontWeight: 700, border: "none", cursor: "pointer",
+                fontFamily: "inherit",
+              }}>
+              Back to Menu 🍲
             </button>
           )}
         </div>

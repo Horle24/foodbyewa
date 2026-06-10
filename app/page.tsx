@@ -12,9 +12,9 @@ import CartFab from "@/components/CartFab";
 import { CartItem, MenuItem } from "@/lib/menuData";
 
 export default function Home() {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [toast, setToast] = useState("");
+  const [cart, setCart]               = useState<CartItem[]>([]);
+  const [drawerOpen, setDrawerOpen]   = useState(false);
+  const [toast, setToast]             = useState("");
   const [toastVisible, setToastVisible] = useState(false);
 
   useEffect(() => {
@@ -48,11 +48,18 @@ export default function Home() {
   }, [showToast]);
 
   const handleUpdateQty = useCallback((id: number, delta: number) => {
-    setCart((prev) => prev.map((c) => c.id === id ? { ...c, qty: c.qty + delta } : c).filter((c) => c.qty > 0));
+    setCart((prev) =>
+      prev.map((c) => c.id === id ? { ...c, qty: c.qty + delta } : c).filter((c) => c.qty > 0)
+    );
   }, []);
 
   const handleRemove = useCallback((id: number) => {
     setCart((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  // ✅ NEW: clears the entire cart (called after order is sent)
+  const handleClearCart = useCallback(() => {
+    setCart([]);
   }, []);
 
   const totalItems = cart.reduce((s, c) => s + c.qty, 0);
@@ -81,6 +88,7 @@ export default function Home() {
         onClose={() => setDrawerOpen(false)}
         onUpdateQty={handleUpdateQty}
         onRemove={handleRemove}
+        onClearCart={handleClearCart}  {/* ✅ NEW: added here */}
       />
 
       {/* ━━━ TOAST ━━━ */}
