@@ -81,14 +81,14 @@ export default function Home() {
         isOpen={drawerOpen}
       />
 
-      {/* ━━━ CART DRAWER ━━━ */}
+      {/* ── CART DRAWER ── */}
       <CartDrawer
         cart={cart}
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onUpdateQty={handleUpdateQty}
         onRemove={handleRemove}
-        onClearCart={handleClearCart}  {}
+        onClearCart={handleClearCart}
       />
 
       {/* ━━━ TOAST ━━━ */}
