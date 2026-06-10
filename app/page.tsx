@@ -9,13 +9,16 @@ import Testimonials from "@/components/Testimonials";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 import CartFab from "@/components/CartFab";
+import ReviewModal from "@/components/ReviewModal";
 import { CartItem, MenuItem } from "@/lib/menuData";
 
 export default function Home() {
-  const [cart, setCart]               = useState<CartItem[]>([]);
-  const [drawerOpen, setDrawerOpen]   = useState(false);
-  const [toast, setToast]             = useState("");
-  const [toastVisible, setToastVisible] = useState(false);
+  const [cart, setCart]                   = useState<CartItem[]>([]);
+  const [drawerOpen, setDrawerOpen]       = useState(false);
+  const [toast, setToast]                 = useState("");
+  const [toastVisible, setToastVisible]   = useState(false);
+  const [reviewOpen, setReviewOpen]       = useState(false);
+  const [lastCustomerName, setLastCustomerName] = useState("");
 
   useEffect(() => {
     const handler = () => setDrawerOpen(true);
@@ -57,16 +60,20 @@ export default function Home() {
     setCart((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  // clears the entire cart (called after order is sent)
-  const handleClearCart = useCallback(() => {
-    setCart([]);
+  const handleClearCart = useCallback(() => setCart([]), []);
+
+  // Called by CartDrawer after successful order
+  const handleOrderSuccess = useCallback((customerName: string) => {
+    setLastCustomerName(customerName);
+    setDrawerOpen(false);
+    // Show review modal after a short delay
+    setTimeout(() => setReviewOpen(true), 800);
   }, []);
 
   const totalItems = cart.reduce((s, c) => s + c.qty, 0);
 
   return (
     <>
-      {/* ━━━ SECTIONS ━━━ */}
       <Hero />
       <WhyUs />
       <Menu cart={cart} onAddToCart={handleAddToCart} />
@@ -74,14 +81,12 @@ export default function Home() {
       <Testimonials />
       <Footer />
 
-      {/* ━━━ FLOATING CART ━━━ */}
       <CartFab
         totalItems={totalItems}
         onClick={() => setDrawerOpen(true)}
         isOpen={drawerOpen}
       />
 
-      {/* ── CART DRAWER ── */}
       <CartDrawer
         cart={cart}
         isOpen={drawerOpen}
@@ -89,9 +94,15 @@ export default function Home() {
         onUpdateQty={handleUpdateQty}
         onRemove={handleRemove}
         onClearCart={handleClearCart}
+        onOrderSuccess={handleOrderSuccess}
       />
 
-      {/* ━━━ TOAST ━━━ */}
+      <ReviewModal
+        isOpen={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        customerName={lastCustomerName}
+      />
+
       <div className={`toast ${toastVisible ? "show" : ""}`}>{toast}</div>
     </>
   );
