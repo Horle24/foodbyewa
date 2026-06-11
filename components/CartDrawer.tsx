@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { CartItem, DeliveryOption, DELIVERY_OPTIONS, buildWhatsAppMessage } from "@/lib/menuData";
 
 const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER!;
-const SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL!;
 
 interface CartDrawerProps {
   cart: CartItem[];
@@ -67,16 +66,21 @@ export default function CartDrawer({ cart, onUpdateQty, onRemove, onClose, isOpe
       special_notes: form.notes,
     };
 
-    // ── Save to Google Sheet directly (bypass Next.js API route) ──
+    // ── Save to Google Sheet via Next.js API route ──
+    // Server-side fetch has no CORS restrictions — this works reliably
     try {
-      await fetch(SCRIPT_URL, {
+      const res = await fetch("/api/orders", {
         method: "POST",
-        mode: "no-cors", // Required for Google Apps Script
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(orderData),
       });
+      const result = await res.json();
+      if (!result.success) {
+        console.error("Order save failed:", result.error);
+      }
     } catch (err) {
-      console.error("Sheet save error:", err);
+      console.error("Order save error:", err);
+      // Don't block WhatsApp even if sheet save fails
     }
 
     // ── Open WhatsApp ──

@@ -1,10 +1,4 @@
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//   FOODBYEWA — Orders API Route
-//   app/api/orders/route.ts
-//   Receives order from CartDrawer →
-//   forwards to Google Apps Script →
-//   saves to Google Sheet
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,36 +9,45 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Validate required fields
-    const { customer_name, customer_phone, delivery_address, items } = body;
-
-    if (!customer_name || !customer_phone || !delivery_address || !items?.length) {
+    if (!body.customer_name || !body.customer_phone || !body.delivery_address || !body.items?.length) {
       return NextResponse.json(
-        { success: false, error: "Missing required order fields." },
+        { success: false, error: "Missing required fields." },
         { status: 400 }
       );
     }
 
-    // Forward order to Google Apps Script
+    // Forward to Google Apps Script
+    // Server-side fetch has NO CORS restrictions
     const response = await fetch(SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    const result = await response.json();
+    const text = await response.text();
 
-    if (!result.success) {
-      throw new Error(result.error || "Google Script failed.");
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      // Apps Script sometimes returns HTML on error
+      console.error("Apps Script response:", text);
+      return NextResponse.json(
+        { success: false, error: "Apps Script returned invalid response." },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json(
-      { success: true, message: "Order saved to sheet!" },
-      { status: 200 }
-    );
+    if (!result.success) {
+      throw new Error(result.error || "Apps Script failed.");
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 });
+
   } catch (err: any) {
     console.error("Order API error:", err.message);
     return NextResponse.json(
-      { success: false, error: err.message || "Something went wrong." },
+      { success: false, error: err.message },
       { status: 500 }
     );
   }
