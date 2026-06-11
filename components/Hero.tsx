@@ -34,6 +34,7 @@ export default function Hero() {
       display: "flex",
       alignItems: "center",
       overflow: "hidden",
+      paddingTop: "80px",
     }}>
       {/* Backgrounds */}
       {SLIDES.map((src, i) => (
