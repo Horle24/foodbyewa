@@ -8,7 +8,7 @@ const SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL!;
 // ── Fixed Nigerian food categories ──
 const CATEGORIES = [
   { label: "All Items", icon: "🍽️" },
-  { label: "Rice",      icon: "🍚" },
+  { label: "Rice Dishes",   icon: "🍚" },
   { label: "Soup",      icon: "🥣" },
   { label: "Swallow",   icon: "🫙" },
   { label: "Protein",   icon: "🍗" },
