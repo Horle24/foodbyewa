@@ -5,35 +5,22 @@ import { MenuItem } from "@/lib/menuData";
 
 const SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL!;
 
-// ── Fixed Nigerian food categories ──
-const CATEGORIES = [
-  { label: "All Items", icon: "🍽️" },
-  { label: "Rice Dishes",   icon: "🍚" },
-  { label: "Soup",      icon: "🥣" },
-  { label: "Swallow",   icon: "🫙" },
-  { label: "Protein",   icon: "🍗" },
-  { label: "Snacks",    icon: "🥟" },
-  { label: "Drinks",    icon: "🥤" },
-  { label: "Other",     icon: "✨" },
-];
+interface MenuItemWithCat extends MenuItem {
+  category?: string;
+}
 
 interface MenuProps {
   cart: { id: number; qty: number }[];
   onAddToCart: (item: MenuItem) => void;
 }
 
-// Extend MenuItem to include category
-interface MenuItemWithCat extends MenuItem {
-  category?: string;
-}
-
 export default function Menu({ cart, onAddToCart }: MenuProps) {
-  const sectionRef   = useRef<HTMLElement>(null);
-  const [menu, setMenu]           = useState<MenuItemWithCat[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState("");
+  const sectionRef = useRef<HTMLElement>(null);
+  const [menu, setMenu]               = useState<MenuItemWithCat[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState("");
   const [activeCategory, setActiveCategory] = useState("All Items");
-  const [search, setSearch]       = useState("");
+  const [search, setSearch]           = useState("");
 
   useEffect(() => {
     async function fetchMenu() {
@@ -65,10 +52,16 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
 
   const isInCart = (id: number) => cart.some((c) => c.id === id);
 
-  // Only show categories that actually have items
-  const availableCategories = CATEGORIES.filter((cat) =>
-    cat.label === "All Items" || menu.some((m) => m.category === cat.label)
-  );
+  // ── Build categories dynamically from actual sheet data ──
+  // This means it will ALWAYS match whatever is in column H
+  const uniqueCategories = Array.from(new Set(menu.map((m) => m.category || "Other").filter(Boolean)));
+  const categories = [
+    { label: "All Items", icon: "🍽️" },
+    ...uniqueCategories.map((cat) => ({
+      label: cat,
+      icon: getCategoryIcon(cat),
+    })),
+  ];
 
   const filtered = menu.filter((item) => {
     const matchCat    = activeCategory === "All Items" || item.category === activeCategory;
@@ -83,7 +76,6 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
       background: "var(--cream)", padding: "6rem 2rem",
       position: "relative", overflow: "hidden",
     }}>
-      {/* Dot pattern bg */}
       <div style={{
         position: "absolute", inset: 0,
         backgroundImage: `radial-gradient(circle, rgba(27,67,50,0.04) 1px, transparent 1px)`,
@@ -92,15 +84,13 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
 
       <div className="container" style={{ position: "relative" }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="reveal" style={{ textAlign: "center", marginBottom: "2.5rem" }}>
           <span style={{
             fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.2em",
             textTransform: "uppercase", color: "var(--gold)",
             display: "block", marginBottom: "0.6rem",
-          }}>
-            Our Menu
-          </span>
+          }}>Our Menu</span>
           <h2 style={{
             fontFamily: "'Playfair Display', serif",
             fontSize: "clamp(2rem, 4vw, 3rem)",
@@ -117,7 +107,7 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
           </p>
         </div>
 
-        {/* ── Search Bar ── */}
+        {/* Search Bar */}
         {!loading && !error && (
           <div className="reveal" style={{ maxWidth: "500px", margin: "0 auto 2rem" }}>
             <div style={{ position: "relative" }}>
@@ -151,23 +141,21 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
                 <button onClick={() => setSearch("")} style={{
                   position: "absolute", right: "1rem", top: "50%",
                   transform: "translateY(-50%)", background: "none",
-                  border: "none", cursor: "pointer",
-                  color: "var(--text-muted)", fontSize: "1rem",
+                  border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem",
                 }}>✕</button>
               )}
             </div>
           </div>
         )}
 
-        {/* ── Category Tabs ── */}
+        {/* Category Tabs — built from real sheet data */}
         {!loading && !error && (
           <div className="reveal" style={{
             display: "flex", gap: "0.6rem", flexWrap: "wrap",
             justifyContent: "center", marginBottom: "2.5rem",
-            paddingBottom: "2rem",
-            borderBottom: "1px solid rgba(27,67,50,0.08)",
+            paddingBottom: "2rem", borderBottom: "1px solid rgba(27,67,50,0.08)",
           }}>
-            {availableCategories.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.label}
                 onClick={() => { setActiveCategory(cat.label); setSearch(""); }}
@@ -175,12 +163,10 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
                   background: activeCategory === cat.label ? "var(--green)" : "white",
                   color: activeCategory === cat.label ? "white" : "var(--charcoal)",
                   border: `1.5px solid ${activeCategory === cat.label ? "var(--green)" : "rgba(27,67,50,0.12)"}`,
-                  padding: "0.5rem 1.2rem",
-                  borderRadius: "var(--radius-full)",
-                  fontSize: "0.85rem", fontWeight: 600,
-                  cursor: "pointer", transition: "all 0.2s ease",
-                  fontFamily: "inherit", display: "inline-flex",
-                  alignItems: "center", gap: "0.4rem",
+                  padding: "0.5rem 1.2rem", borderRadius: "var(--radius-full)",
+                  fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
+                  transition: "all 0.2s ease", fontFamily: "inherit",
+                  display: "inline-flex", alignItems: "center", gap: "0.4rem",
                   boxShadow: activeCategory === cat.label ? "0 4px 14px rgba(27,67,50,0.2)" : "none",
                 }}
                 onMouseEnter={(e) => {
@@ -196,86 +182,63 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
                   }
                 }}
               >
-                <span>{cat.icon}</span>
-                {cat.label}
+                <span>{cat.icon}</span> {cat.label}
               </button>
             ))}
           </div>
         )}
 
-        {/* ── Loading ── */}
+        {/* Loading */}
         {loading && (
-          <div style={{
-            display: "flex", flexDirection: "column",
-            alignItems: "center", padding: "5rem", gap: "1.2rem",
-          }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "5rem", gap: "1.2rem" }}>
             <div style={{
               width: "48px", height: "48px",
-              border: "3px solid var(--cream-dark)",
-              borderTop: "3px solid var(--gold)",
+              border: "3px solid var(--cream-dark)", borderTop: "3px solid var(--gold)",
               borderRadius: "50%", animation: "spin 0.8s linear infinite",
             }} />
-            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-              Loading today&apos;s menu...
-            </p>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Loading today&apos;s menu...</p>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
 
-        {/* ── Error ── */}
+        {/* Error */}
         {error && !loading && (
-          <div style={{
-            textAlign: "center", padding: "4rem", background: "white",
-            borderRadius: "var(--radius-lg)", border: "1px solid rgba(193,68,14,0.15)",
-          }}>
+          <div style={{ textAlign: "center", padding: "4rem", background: "white", borderRadius: "var(--radius-lg)", border: "1px solid rgba(193,68,14,0.15)" }}>
             <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>😔</div>
             <p style={{ color: "var(--terracotta)", fontWeight: 600 }}>{error}</p>
           </div>
         )}
 
-        {/* ── No results ── */}
+        {/* No results */}
         {!loading && !error && filtered.length === 0 && (
           <div style={{ textAlign: "center", padding: "4rem", color: "var(--text-muted)" }}>
             <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🍽️</div>
             <p style={{ fontWeight: 600, marginBottom: "0.4rem" }}>No dishes found</p>
-            <p style={{ fontSize: "0.88rem", marginBottom: "1.2rem" }}>
-              Try a different search or category
-            </p>
+            <p style={{ fontSize: "0.88rem", marginBottom: "1.2rem" }}>Try a different search or category</p>
             <button onClick={() => { setSearch(""); setActiveCategory("All Items"); }} style={{
               background: "var(--green)", color: "white", border: "none",
               padding: "0.6rem 1.4rem", borderRadius: "var(--radius-full)",
-              cursor: "pointer", fontFamily: "inherit",
-              fontWeight: 600, fontSize: "0.88rem",
-            }}>
-              Clear filters
-            </button>
+              cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: "0.88rem",
+            }}>Clear filters</button>
           </div>
         )}
 
-        {/* ── Menu Grid ── */}
+        {/* Menu Grid */}
         {!loading && !error && filtered.length > 0 && (
           <>
-            <div style={{
-              display: "flex", justifyContent: "space-between",
-              alignItems: "center", marginBottom: "1.2rem",
-            }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
               <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
                 <strong style={{ color: "var(--green-dark)" }}>{filtered.length}</strong>{" "}
                 {filtered.length === 1 ? "dish" : "dishes"} available
                 {activeCategory !== "All Items" && (
-                  <span style={{ color: "var(--gold)", fontWeight: 700 }}>
-                    {" "}· {activeCategory}
-                  </span>
+                  <span style={{ color: "var(--gold)", fontWeight: 700 }}> · {activeCategory}</span>
                 )}
               </p>
               {(search || activeCategory !== "All Items") && (
                 <button onClick={() => { setSearch(""); setActiveCategory("All Items"); }} style={{
                   background: "none", border: "none", color: "var(--text-muted)",
-                  fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit",
-                  textDecoration: "underline",
-                }}>
-                  Clear all
-                </button>
+                  fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit", textDecoration: "underline",
+                }}>Clear all</button>
               )}
             </div>
 
@@ -296,12 +259,11 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
           </>
         )}
 
-        {/* ── Bottom CTA ── */}
+        {/* Bottom CTA */}
         {!loading && !error && (
           <div className="reveal" style={{
             textAlign: "center", marginTop: "4rem",
-            background: "var(--green-dark)",
-            borderRadius: "var(--radius-lg)",
+            background: "var(--green-dark)", borderRadius: "var(--radius-lg)",
             padding: "2.5rem 2rem", position: "relative", overflow: "hidden",
           }}>
             <div style={{
@@ -312,15 +274,11 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
             <p style={{
               fontFamily: "'Playfair Display', serif",
               fontSize: "clamp(1.1rem, 2.5vw, 1.4rem)",
-              color: "var(--cream)", fontWeight: 700,
-              marginBottom: "0.4rem", position: "relative",
+              color: "var(--cream)", fontWeight: 700, marginBottom: "0.4rem", position: "relative",
             }}>
               Can&apos;t decide? Ask Ewa directly! 🍲
             </p>
-            <p style={{
-              color: "rgba(255,255,255,0.5)", fontSize: "0.88rem",
-              marginBottom: "1.4rem", position: "relative",
-            }}>
+            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.88rem", marginBottom: "1.4rem", position: "relative" }}>
               WhatsApp Ewa for today&apos;s specials and custom orders
             </p>
             <a
@@ -330,9 +288,8 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
                 display: "inline-flex", alignItems: "center", gap: "0.5rem",
                 background: "var(--gold)", color: "var(--green-dark)",
                 padding: "0.85rem 2rem", borderRadius: "var(--radius-full)",
-                fontWeight: 800, fontSize: "0.92rem",
-                textDecoration: "none", transition: "all 0.25s",
-                boxShadow: "var(--shadow-gold)", position: "relative",
+                fontWeight: 800, fontSize: "0.92rem", textDecoration: "none",
+                transition: "all 0.25s", boxShadow: "var(--shadow-gold)", position: "relative",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--gold-light)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "var(--gold)"; e.currentTarget.style.transform = "translateY(0)"; }}
@@ -344,6 +301,20 @@ export default function Menu({ cart, onAddToCart }: MenuProps) {
       </div>
     </section>
   );
+}
+
+// ── Get icon based on category name ──
+function getCategoryIcon(cat: string): string {
+  const c = cat.toLowerCase();
+  if (c.includes("rice")) return "🍚";
+  if (c.includes("soup")) return "🥣";
+  if (c.includes("swallow")) return "🫙";
+  if (c.includes("protein") || c.includes("chicken") || c.includes("meat")) return "🍗";
+  if (c.includes("snack") || c.includes("appetizer") || c.includes("moi") || c.includes("akara")) return "🥟";
+  if (c.includes("drink") || c.includes("beverage")) return "🥤";
+  if (c.includes("porridge") || c.includes("beans") || c.includes("plantain")) return "🍛";
+  if (c.includes("vegetar") || c.includes("vegan")) return "🥗";
+  return "✨";
 }
 
 // ── Food Card ──
@@ -373,7 +344,6 @@ function FoodCard({ item, inCart, onAdd }: {
           position: "absolute", bottom: 0, left: 0, right: 0, height: "55%",
           background: "linear-gradient(to top, rgba(13,43,31,0.6), transparent)",
         }} />
-        {/* Category pill */}
         <div style={{
           position: "absolute", top: "0.8rem", left: "0.8rem",
           background: "rgba(13,43,31,0.85)", backdropFilter: "blur(6px)",
@@ -383,7 +353,6 @@ function FoodCard({ item, inCart, onAdd }: {
         }}>
           {item.category || item.badge}
         </div>
-        {/* Price */}
         <div style={{
           position: "absolute", bottom: "0.8rem", right: "0.8rem",
           fontFamily: "'Playfair Display', serif",
@@ -397,9 +366,7 @@ function FoodCard({ item, inCart, onAdd }: {
         <h3 style={{
           fontFamily: "'Playfair Display', serif", fontSize: "1.1rem",
           fontWeight: 700, color: "var(--green-dark)", marginBottom: "0.4rem",
-        }}>
-          {item.name}
-        </h3>
+        }}>{item.name}</h3>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: 1.55, marginBottom: "1.2rem" }}>
           {item.desc}
         </p>
