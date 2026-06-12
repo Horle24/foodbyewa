@@ -34,7 +34,6 @@ export default function Hero() {
       display: "flex",
       alignItems: "center",
       overflow: "hidden",
-      paddingTop: "80px",
     }}>
       {/* Backgrounds */}
       {SLIDES.map((src, i) => (
@@ -92,6 +91,7 @@ export default function Hero() {
         marginLeft: "clamp(1.2rem, 8%, 120px)",
         padding: "2rem 1.5rem 2rem clamp(1.2rem, 4%, 3rem)",
         borderLeft: "1px solid rgba(212,160,23,0.2)",
+        marginTop: "80px", // push content below navbar
       }}>
         {/* Badge */}
         <div style={{
